@@ -18,7 +18,7 @@ var (
 	passSummLn  = regexp.MustCompile(`^ok\s+[\w_\-\.\/]+\s+[0-9\.]+s$`)
 	failSummLn  = regexp.MustCompile(`^FAIL\s+[\w_\-\.\/]+\s+([0-9\.]+s|\[build failed\])$`)
 	skip        = regexp.MustCompile(`^--- SKIP: Test.*$`)
-skipSummLn  = regexp.MustCompile(`^\?\s+[\w_\-\.\/]+\s+\[no test files\]$`)
+	skipSummLn  = regexp.MustCompile(`^\?\s+[\w_\-\.\/]+\s+\[no test files\]$`)
 	errLn       = regexp.MustCompile(`^(\s+\w+\.go):([0-9]+):( .*)$`)
 )
 
