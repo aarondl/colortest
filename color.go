@@ -2,61 +2,110 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
+	"time"
 
 	"github.com/mgutz/ansi"
 )
 
 var (
-	run         = regexp.MustCompile(`^=== RUN Test.*$`)
-	pass        = regexp.MustCompile(`^--- PASS: Test.*$`)
-	fail        = regexp.MustCompile(`^--- FAIL: Test.*$`)
-	passSummary = regexp.MustCompile(`^PASS$`)
-	failSummary = regexp.MustCompile(`^FAIL$`)
-	passSummLn  = regexp.MustCompile(`^ok\s+[\w_\-\.\/]+\s+[0-9\.]+s$`)
-	failSummLn  = regexp.MustCompile(`^FAIL\s+[\w_\-\.\/]+\s+([0-9\.]+s|\[build failed\])$`)
-	skip        = regexp.MustCompile(`^--- SKIP: Test.*$`)
-	skipSummLn  = regexp.MustCompile(`^\?\s+[\w_\-\.\/]+\s+\[no test files\]$`)
-	errLn       = regexp.MustCompile(`^(\s+\w+\.go):([0-9]+):( .*)$`)
+	errLn = regexp.MustCompile(`^(\s+\w+\.go):([0-9]+):( .*)$`)
+
+	red    = ansi.ColorCode("red+b")
+	green  = ansi.ColorCode("green+b")
+	yellow = ansi.ColorCode("yellow+b")
+	reset  = ansi.Reset
+
+	throwAwayPrefixes = []string{`--- PASS:`, `=== RUN`, `--- FAIL:`, `=== CONT`, `=== PAUSE`}
 )
+
+// TestEvent as defined by the testing docs.
+type TestEvent struct {
+	Time    time.Time // encodes as an RFC3339-format string
+	Action  string
+	Package string
+	Test    string
+	Elapsed float64 // seconds
+	Output  string
+}
 
 func main() {
 	scan := bufio.NewScanner(os.Stdin)
 
+	output := make(map[string][]string)
+
 	for scan.Scan() {
-		if err := scan.Err(); err != nil {
-			fmt.Println("Error scanning:", err)
+		te := TestEvent{}
+		err := json.Unmarshal(scan.Bytes(), &te)
+		if err != nil {
+			panic("failed to decode json: " + err.Error())
 		}
 
-		reset := ansi.ColorCode("reset")
+		/*
+				fmt.Printf("%s%s%s\n", ansi.ColorCode("blue"), line, reset)
+			case pass.Match(line), passSummary.Match(line), passSummLn.Match(line):
+				fmt.Printf("%s%s%s\n", ansi.ColorCode("green+b"), line, reset)
+			case fail.Match(line), failSummary.Match(line), failSummLn.Match(line):
+				fmt.Printf("%s%s%s\n", ansi.ColorCode("red+b"), line, reset)
+			case skip.Match(line), skipSummLn.Match(line):
+				fmt.Printf("%s%s%s\n", ansi.ColorCode("yellow+b"), line, reset)
+				fmt
+		*/
 
-		line := scan.Bytes()
-		switch {
-		case run.Match(line):
-			fmt.Printf("%s%s%s\n", ansi.ColorCode("blue"), line, reset)
-		case pass.Match(line), passSummary.Match(line), passSummLn.Match(line):
-			fmt.Printf("%s%s%s\n", ansi.ColorCode("green+b"), line, reset)
-		case fail.Match(line), failSummary.Match(line), failSummLn.Match(line):
-			fmt.Printf("%s%s%s\n", ansi.ColorCode("red+b"), line, reset)
-		case skip.Match(line), skipSummLn.Match(line):
-			fmt.Printf("%s%s%s\n", ansi.ColorCode("yellow+b"), line, reset)
-		case errLn.Match(line):
-			submatches := errLn.FindSubmatch(line)
-			fmt.Printf("%s%s%s%s:%s:%s%s%s%s\n",
-				ansi.ColorCode("red+b"),
-				submatches[1],
-				reset,
-				ansi.ColorCode("yellow+b"),
-				submatches[2],
-				reset,
-				ansi.ColorCode("red+b"),
-				submatches[3],
-				reset,
-			)
-		default:
-			fmt.Printf("%s\n", line)
+		if len(te.Test) == 0 {
+			switch te.Action {
+			case "fail":
+				fmt.Printf("%s%s%s\n", red, "FAIL: "+te.Package, reset)
+			case "pass":
+				fmt.Printf("%s%s%s\n", green, "PASS: "+te.Package, reset)
+			}
+			continue
 		}
+
+		switch te.Action {
+		case "fail":
+			out := output[te.Test]
+			fmt.Printf("%s%s%s\n", red, "FAIL: "+te.Test, reset)
+			for _, line := range out {
+				fmt.Printf("%s%s%s\n", red, line, reset)
+			}
+			delete(output, te.Test)
+		case "pass":
+			out := output[te.Test]
+			fmt.Printf("%s%s%s\n", green, "PASS: "+te.Test, reset)
+			for _, line := range out {
+				fmt.Printf("%s%s%s\n", green, line, reset)
+			}
+			delete(output, te.Test)
+		case "skip":
+			out := output[te.Test]
+			fmt.Printf("%s%s%s\n", yellow, "SKIP: "+te.Test, reset)
+			for _, line := range out {
+				fmt.Printf("%s%s%s\n", yellow, line, reset)
+			}
+			delete(output, te.Test)
+		case "output":
+			noSpace := strings.TrimSpace(te.Output)
+			throwAway := false
+
+			for _, pfx := range throwAwayPrefixes {
+				if strings.HasPrefix(noSpace, pfx) {
+					throwAway = true
+					break
+				}
+			}
+
+			if !throwAway {
+				output[te.Test] = append(output[te.Test], strings.TrimRight(te.Output, "\r\n"))
+			}
+		}
+	}
+
+	if err := scan.Err(); err != nil {
+		fmt.Println("Error scanning:", err)
 	}
 }
