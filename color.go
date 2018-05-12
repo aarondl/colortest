@@ -45,17 +45,6 @@ func main() {
 			panic("failed to decode json: " + err.Error())
 		}
 
-		/*
-				fmt.Printf("%s%s%s\n", ansi.ColorCode("blue"), line, reset)
-			case pass.Match(line), passSummary.Match(line), passSummLn.Match(line):
-				fmt.Printf("%s%s%s\n", ansi.ColorCode("green+b"), line, reset)
-			case fail.Match(line), failSummary.Match(line), failSummLn.Match(line):
-				fmt.Printf("%s%s%s\n", ansi.ColorCode("red+b"), line, reset)
-			case skip.Match(line), skipSummLn.Match(line):
-				fmt.Printf("%s%s%s\n", ansi.ColorCode("yellow+b"), line, reset)
-				fmt
-		*/
-
 		if len(te.Test) == 0 {
 			switch te.Action {
 			case "fail":
